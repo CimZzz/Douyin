@@ -1,3 +1,5 @@
+import com.sun.prism.PhongMaterial
+import com.sun.xml.internal.messaging.saaj.util.ByteOutputStream
 import java.io.*
 import java.util.*
 import kotlin.collections.HashMap
@@ -18,10 +20,26 @@ fun main(args: Array<String>) {
     while(true) {
         val line = readLine()?:break
         val lineArr = line.split(" ")
-        if(lineArr.size == 2) {
+        if(lineArr.size == 1) {
+            if(lineArr[0] == "count") {
+                println("数量为: ${rootMap.size}")
+            }
+            else if(lineArr[0] == "allIdx") {
+                printAllIdx(rootMap)
+            }
+        }
+        else if(lineArr.size == 2) {
             if(lineArr[0] == "read") {
                 try {
                     println(readStr(lineArr[1], rootMap))
+                }
+                catch (e: Throwable) {
+                    println("读取字符发生错误: $e")
+                }
+            }
+            else if(lineArr[0] == "count") {
+                try {
+                    println("数量为: ${readCount(lineArr[1], rootMap)}")
                 }
                 catch (e: Throwable) {
                     println("读取字符发生错误: $e")
@@ -44,6 +62,36 @@ fun main(args: Array<String>) {
     println("结束")
 }
 
+private fun printAllIdx(rootMap: FirstMap) {
+    rootMap.forEach { idx, second ->
+        second.forEach { secondIdx, third ->
+            third.forEach {thirdIdx, _ ->
+                println("$idx-$secondIdx-$thirdIdx")
+            }
+        }
+    }
+}
+
+private fun readCount(line: String, rootMap: FirstMap): Int{
+    val lineArr = line.split("-")
+
+    when(lineArr.size) {
+        1 -> {
+            val first = lineArr[0].toIntOrNull()?:throw RuntimeException("第一个下标不存在: $line")
+            val secondMap = rootMap[first]?:throw RuntimeException("第一个下标 Map 不存在: $line")
+            return secondMap.size
+        }
+        2 -> {
+            val first = lineArr[0].toIntOrNull()?:throw RuntimeException("第一个下标不存在: $line")
+            val second = lineArr[1].toIntOrNull()?:throw RuntimeException("第二个下标不存在: $line")
+
+            val secondMap = rootMap[first]?:throw RuntimeException("第一个下标 Map 不存在: $line")
+            val thirdMap = secondMap[second]?:throw RuntimeException("第二个下标 Map 不存在: $line")
+            return thirdMap.size
+        }
+        else -> throw RuntimeException("格式错误: $line")
+    }
+}
 
 private fun readStr(line: String, rootMap: FirstMap): String {
     val lineArr = line.split("-")
@@ -92,128 +140,346 @@ private fun writeFile(path: String, list: List<String>): Boolean {
 
 private fun readFile(): FirstMap {
 
-    class BufferTreeNode {
-        var type: Int? = null
-        val next: HashMap<Char, BufferTreeNode>? = null
-
-        fun add(value: Char, node: BufferTreeNode): BufferTreeNode {
-            val map = next?:{
-                val tmpMap = HashMap<Char, BufferTreeNode>()
-                tmpMap[value] = node
-                tmpMap
-            }()
-            map[value] = node
-            return node
-        }
-
-        fun get(value: Char): BufferTreeNode? {
-            return next?.get(value)
-        }
-    }
-
-    fun buildNode(value: String, type: Int, rootNode: BufferTreeNode) {
-        var currentNode = rootNode
-        value.forEach {
-            currentNode = currentNode.add(it, rootNode)
-        }
-
-        currentNode.type = type
-    }
-
-
-    val sourceFile = File("/Users/wangyanxiong/WebstormProjects/SSS/src", "um.js")
+    val sourceFile = File("/Users/cimzzz/WebstormProjects/SSS/src", "um.js")
     val reader = BufferedInputStream(BufferedInputStream(FileInputStream(sourceFile)))
 //    var writer = ByteArrayOutputStream()
 
-
-    val TYPE_DEFAULT = 0
-    val TYPE_SWITCH = 1
-    val TYPE_CASE = 2
-    val TYPE_BREAK = 3
-    val TYPE_RETURN = 4
-
-    val rootMap = FirstMap()
-    var valueBuffer: String = ""
-    var totalScopeCount = 0
-    var secondScopeIdx = 0
-    var thirdScopeIdx = 0
-    var type = 0
-
-    val rootNode = BufferTreeNode()
-    var bufferNode: BufferTreeNode = rootNode
-    buildNode("switch", 1, rootNode)
-    buildNode("case", 2, rootNode)
-    buildNode("break", 3, rootNode)
-    buildNode("return", 4, rootNode)
-
-
-
-    fun dropBuffer() {
-        bufferNode = rootNode
-    }
-
-    fun appendBuffer(char: Char) {
-        val nextNode = bufferNode.get(char)
-        if(nextNode == null) {
-            dropBuffer()
-            return
-        }
-
-        bufferNode = nextNode
-    }
-
-    fun checkBuffer() {
-        val newType = bufferNode.type
-        if(newType == null) {
-            dropBuffer()
-            return
-        }
-
-        type = newType
-    }
-
-    fun
-
-    fun checkScope() {
-
-    }
-
-
-
-    while(true) {
-        val readByte = reader.read()
-
-        when(readByte.toChar()) {
-            '{' -> {
-                totalScopeCount ++
-                dropBuffer()
-                checkScope()
-            }
-            '}' -> {
-                totalScopeCount --
-                dropBuffer()
-                checkScope()
-            }
-            '(', ')', ' ' -> {
-                checkBuffer()
-            }
-            else -> {
-
-            }
-        }
-    }
-
-    return rootMap
+    return makeFirstMap(reader)
 }
 
-private fun findCaseCode(line: String): Int {
-    val idx = line.indexOf(" ")
-    val endIdx = line.indexOf(":")
-    try {
-        return line.substring(idx + 1, endIdx).toInt()
+
+class BufferTreeNode(
+    private val value: Int? = null,
+    private val parent: BufferTreeNode? = null
+) {
+    var type: Int? = null
+    var next: HashMap<Int, BufferTreeNode>? = null
+
+    fun add(value: Int, node: BufferTreeNode): BufferTreeNode {
+        val map = next?:{
+            val tmpMap = HashMap<Int, BufferTreeNode>()
+            this.next = tmpMap
+            tmpMap
+        }()
+        map[value] = node
+        return node
     }
-    catch (e: Throwable) {
-        println(line)
-        throw e
+
+    fun get(value: Int): BufferTreeNode? {
+        return next?.get(value)
     }
+
+    fun getValue(): String {
+        val str = ByteOutputStream()
+        var curParent = parent
+        while(true) {
+            val byte = curParent?.value?:break
+            curParent = curParent.parent
+            str.write(byte)
+        }
+
+        if(str.count != 0)
+            return str.toString()
+        else return ""
+    }
+}
+
+fun buildNode(value: String, type: Int, rootNode: BufferTreeNode? = null): BufferTreeNode {
+    val realRootNode = rootNode?:BufferTreeNode()
+    var currentNode = realRootNode
+
+    value.forEach {
+        val byte = it.toInt()
+        currentNode = currentNode.add(byte, BufferTreeNode(byte, currentNode))
+    }
+
+    currentNode.type = type
+    return realRootNode
+}
+
+private fun findCaseNumber(reader: InputStream): Int {
+    var isLooping = true
+    val buffer = ByteOutputStream()
+    while (isLooping)  {
+        val readByte = reader.read()
+        val char = readByte.toChar()
+        when(char) {
+            ':' -> {
+                isLooping = false
+            }
+            else -> buffer.write(readByte)
+        }
+    }
+    return buffer.toString().trim().toInt()
+}
+
+private fun makeFirstMap(reader: InputStream): FirstMap {
+    val map = FirstMap()
+    var scopeCount = 0
+    var isLooping = true
+    val rootBuffer = buildNode("case", 0)
+    var buffer = rootBuffer
+
+    while(isLooping) {
+        val readByte = reader.read()
+        if(readByte == -1)
+            break
+        val char = readByte.toChar()
+        when(char) {
+            '{' -> {
+                scopeCount ++
+                buffer = rootBuffer
+            }
+            '}' -> {
+                scopeCount --
+                if(scopeCount <= 0) {
+                    isLooping = false
+                }
+                buffer = rootBuffer
+            }
+            ' ' -> {
+                if(buffer.type != null) {
+                    /// 表示找到了 case
+                    val caseNumber = findCaseNumber(reader)
+                    val secondMap = SecondMap()
+                    map[caseNumber] = secondMap
+                    val newScopeCount = makeSecondMap(reader, caseNumber, secondMap)
+                    scopeCount += newScopeCount
+                    if(scopeCount <= 0) {
+                        isLooping = false
+                    }
+                }
+                buffer = rootBuffer
+            }
+            else -> {
+                buffer = buffer.get(readByte)?:rootBuffer
+            }
+        }
+    }
+
+    return map
+}
+
+/// 如果多读取了一次返回花括号，会将其返回
+private fun makeSecondMap(reader: InputStream, caseIdx: Int, map: SecondMap): Int {
+    var scopeCount = 0
+    var isLooping = true
+    val rootBuffer = buildNode("case", 0)
+    var buffer = rootBuffer
+    while(isLooping) {
+        val readByte = reader.read()
+        if(readByte == -1) {
+            scopeCount = Int.MIN_VALUE
+            break
+        }
+        val char = readByte.toChar()
+        when(char) {
+            '{' -> {
+                scopeCount ++
+                buffer = rootBuffer
+            }
+            '}' -> {
+                scopeCount --
+                if(scopeCount <= 0) {
+                    isLooping = false
+                }
+                buffer = rootBuffer
+            }
+            ' ' -> {
+                if(buffer.type != null) {
+                    /// 表示找到了 case
+                    val caseNumber = findCaseNumber(reader)
+                    val thirdMap = ThirdMap()
+                    map[caseNumber] = thirdMap
+                    scopeCount += makeThirdMap(reader, caseIdx, caseNumber, thirdMap)
+                    if(scopeCount <= 0) {
+                        isLooping = false
+                    }
+                }
+                buffer = rootBuffer
+            }
+            else -> {
+                buffer = buffer.get(readByte)?:rootBuffer
+            }
+        }
+    }
+
+    return scopeCount
+}
+
+/// 如果多读取了一次返回花括号，会将其返回
+private fun makeThirdMap(reader: InputStream, secondIdx: Int, caseIdx: Int, map: ThirdMap): Int {
+    var scopeCount = 0
+    var isLooping = true
+    val rootBuffer = buildNode("case", 0)
+    var buffer = rootBuffer
+    while(isLooping) {
+        val readByte = reader.read()
+        if(readByte == -1) {
+            scopeCount = Int.MIN_VALUE
+            break
+        }
+        val char = readByte.toChar()
+        when(char) {
+            '{' -> {
+                scopeCount ++
+                buffer = rootBuffer
+            }
+            '}' -> {
+                scopeCount --
+                if(scopeCount <= 0) {
+                    isLooping = false
+                }
+                buffer = rootBuffer
+            }
+            ' ' -> {
+                if(buffer.type != null) {
+                    val helper = ThirdMapFindHelper()
+                    helper.content = ""
+                    helper.scopeCount = 0
+                    helper.hasCase = true
+                    while (isLooping && helper.hasCase) {
+                        helper.content = ""
+                        helper.scopeCount = 0
+                        helper.hasCase = false
+                        /// 表示找到了 case
+                        val caseNumber = findCaseNumber(reader)
+                        if(secondIdx == 1 && caseIdx == 15 && caseNumber == 0) {
+                            var i = 0
+                            i++
+                        }
+                        findCmd(reader, caseIdx, helper)
+                        map[caseNumber] = helper.content
+                        if(secondIdx == 1 && caseIdx == 15 && caseNumber == 0) {
+                            var i = 0
+                            i++
+                        }
+                        scopeCount += helper.scopeCount
+
+
+                        if(scopeCount <= 0) {
+                            isLooping = false
+                        }
+                    }
+
+                }
+                buffer = rootBuffer
+            }
+            else -> {
+                buffer = buffer.get(readByte)?:rootBuffer
+            }
+        }
+    }
+
+    return scopeCount
+}
+
+private fun readLine(reader: InputStream): String {
+    val outputStream = ByteOutputStream()
+    while(true) {
+        val readByte = reader.read()
+        val char = readByte.toChar()
+        outputStream.write(readByte)
+        if(char == '\n')
+            break
+    }
+
+    return outputStream.toString()
+}
+
+private fun findCmd(reader: InputStream, caseIdx: Int, helper: ThirdMapFindHelper) {
+    var scopeCount = 0
+    var isLooping = true
+    var isReturning = false
+    var isMore = false
+    val rootBuffer = buildNode("case", 0)
+    buildNode("break", 1, rootBuffer)
+    buildNode("return", 2, rootBuffer)
+    buildNode("\\", 3, rootBuffer)
+    var buffer = rootBuffer
+    val valueBuffer = ByteArrayOutputStream()
+
+    fun flushBuffer() {
+        val bufferStr = buffer.getValue()
+        if(bufferStr.isNotBlank())
+            valueBuffer.write(bufferStr.toByteArray())
+        buffer = rootBuffer
+    }
+
+    while(isLooping) {
+        val readByte = reader.read()
+        if(readByte == -1) {
+            flushBuffer()
+            scopeCount = Int.MIN_VALUE
+            break
+        }
+        val char = readByte.toChar()
+        when(char) {
+            '{' -> {
+                if(buffer.type != 3)
+                    scopeCount ++
+                flushBuffer()
+                valueBuffer.write(readByte)
+            }
+            '}' -> {
+                if(buffer.type != 3)
+                    scopeCount --
+                flushBuffer()
+                if(scopeCount < 0) {
+                    isLooping = false
+                }
+                else valueBuffer.write(readByte)
+            }
+            ',' -> {
+                flushBuffer()
+                valueBuffer.write(readByte)
+                if(isReturning) {
+                    isMore = true
+                }
+            }
+            '\n' -> {
+                flushBuffer()
+                valueBuffer.write(readByte)
+                if(isReturning) {
+                    if(isMore) {
+                        isMore = false
+                    }
+                    else isLooping = false
+                }
+            }
+            else -> {
+                buffer = buffer.get(readByte)?:{
+                    flushBuffer()
+                    valueBuffer.write(readByte)
+                   rootBuffer.get(readByte)?:rootBuffer
+                }()
+
+
+                if(scopeCount <= 0) {
+                    when (buffer.type) {
+                        0 -> {
+                            helper.hasCase = true
+                            isLooping = false
+                        }
+                        1 -> {
+                            if(!isReturning)
+                                isLooping = false
+                        }
+                        2 -> {
+                            isReturning = true
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    helper.content = valueBuffer.toString()
+    helper.scopeCount = scopeCount
+}
+
+class ThirdMapFindHelper {
+    var content: String = ""
+    var scopeCount: Int = 0
+    var hasCase: Boolean = false
 }
